@@ -31,7 +31,7 @@ gmail-grant --account personal --scopes gmail     # obtain one; needs an unlocke
 ```
 
 `CLAUDE.md` carries the boundary and the rules. `.claude/skills/personal-connections/`
-is the operator guide.
+is the operator guide. `ADOPTING.md` is what a consuming project has to do.
 
 ## Develop
 

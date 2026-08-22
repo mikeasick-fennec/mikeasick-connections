@@ -27,25 +27,9 @@ task touching both inboxes goes through this package.
 
 ## Using it from another project
 
-Install from `origin/main`. Never a path install, never `-e` on this working tree:
-
-```
-pip install "git+https://github.com/mikeasick-fennec/mikeasick-connections@main"
-```
-
-Then:
-
-```python
-from mikeasick_connections import gmail_auth
-
-services = gmail_auth.get_all_services()          # {alias: gmail service}, readonly
-svc = gmail_auth.get_modify_service("personal")   # label / draft / send
-cal = gmail_auth.get_all_calendar_services()
-```
-
-`get_all_services` returns only accounts holding a sealed grant, so a missing grant is a
-missing key, not an exception mid-run. Gate on `gmail_auth.has_modify_token(alias)` before
-reaching for modify scope: without a grant that call opens an interactive consent.
+`README.md` has the install line and the API. `ADOPTING.md` has what a consuming project
+must do: pin it, shim any existing Gmail module, and add the guard that stops a second
+copy growing.
 
 ## Commands
 
