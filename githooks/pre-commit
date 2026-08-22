@@ -1,0 +1,23 @@
+#!/bin/sh
+# Blocks a commit that stages a secret.
+#
+# Instructions are not a control: anthropics/claude-code#2142 records three API keys
+# committed to a public repo in one session despite a 150-line file saying never to.
+# This hook is the control. It is committed, so it travels with the repo.
+#
+# Enable on a new machine:  git config core.hooksPath githooks
+
+GL="$LOCALAPPDATA/Microsoft/WinGet/Packages/Gitleaks.Gitleaks_Microsoft.Winget.Source_8wekyb3d8bbwe/gitleaks.exe"
+[ -x "$GL" ] || GL="$(command -v gitleaks)"
+
+if [ -z "$GL" ]; then
+  echo "[gitleaks] NOT INSTALLED -- refusing to commit unscanned." >&2
+  echo "           winget install gitleaks.gitleaks" >&2
+  exit 1
+fi
+
+"$GL" git --pre-commit --staged --no-banner || {
+  echo "[gitleaks] commit BLOCKED: staged content matched a secret rule." >&2
+  echo "           Remove the secret, do not --no-verify past this." >&2
+  exit 1
+}

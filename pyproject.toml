@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mikeasick-connections"
+version = "0.1.0"
+description = "Michael's personal-level connections: identities, and the grants that reach them"
+requires-python = ">=3.12"
+dependencies = [
+    "google-auth",
+    "google-auth-oauthlib",
+    "google-api-python-client",
+]
+
+[project.scripts]
+gmail-grant = "mikeasick_connections.cli:grant"
+gmail-check = "mikeasick_connections.cli:check"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mikeasick_connections"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

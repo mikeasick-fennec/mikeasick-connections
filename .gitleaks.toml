@@ -1,0 +1,16 @@
+# Auto-loaded by `gitleaks dir .` (config precedence #4).
+#
+# gitleaks deliberately does not honour .gitignore: .env is gitignored and is
+# exactly what you want scanned. Exclusions are therefore explicit.
+#
+# Measured 2026-08-22 before the first commit: 46 findings, all 46 in .venv --
+# oauthlib and google-auth carry example keys in their own source. Zero in ours.
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Vendored dependencies carry their own example keys"
+paths = [
+  '''^\.venv[\/]''',
+]

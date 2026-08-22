@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+# No secret belongs in this repo. Grants live sealed at ~/.fnx/gmail/.
+secrets/
+*.json.local
