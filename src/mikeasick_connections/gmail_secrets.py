@@ -69,11 +69,32 @@ def _fnx_setup_scripts() -> Path:
 
 
 def _load_fnx():
+    """The seal and the atomic writer, resolved across plugin boundaries.
+
+    `rest_protect` lived in fnx-setup until it moved to fnx-core (measured
+    2026-08-24: absent from fnx-setup 0.47.50, present in fnx-core 0.21.187).
+    `core_locator.load_core_module` is the vendor's own resolver for exactly
+    that -- fnx-setup 0.47.50 uses it to reach `rest_protect` too -- so it keeps
+    working across the next move. Importing by a fixed location does not.
+    """
     scripts = str(_fnx_setup_scripts())
     if scripts not in sys.path:
         sys.path.insert(0, scripts)
-    import rest_protect as _rp
     from lifecycle.engine import atomic_write_json as _aw
+    try:
+        import core_locator
+    except ImportError as exc:  # pragma: no cover - fnx-setup layout changed
+        raise GmailSecretError(
+            f"fnx-setup at {scripts} has no core_locator; cannot resolve the "
+            f"seal helper"
+        ) from exc
+    try:
+        _rp = core_locator.load_core_module("rest_protect", __file__)
+    except ImportError as exc:
+        raise GmailSecretError(
+            "could not resolve rest_protect from fnx-core; is the fnx-core "
+            "plugin installed?"
+        ) from exc
     return _rp, _aw
 
 
