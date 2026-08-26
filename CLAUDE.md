@@ -34,10 +34,14 @@ publication, not location -- so a path install is the boundary. If a capability 
 needs to reach another person or another machine's user account, that is the moment to
 promote it to a real plugin, not a moment to copy files.
 
-**Consumes fnx-setup, does not publish through it.** `rest_protect` (the DPAPI seal) and
-`atomic_write_json` are resolved from `installed_plugins.json` `installPath`, per the
-fnx-core plugin contract. Never path math on `__file__`: those plugins are versioned
-independently and the cache is `<plugin>/<version>/`.
+**Consumes the fnx plugins, does not publish through them.** `atomic_write_json` comes
+from fnx-setup, resolved from `installed_plugins.json` `installPath`. `rest_protect` (the
+DPAPI seal) comes from fnx-core via `core_locator.load_core_module`, the vendor's own
+cross-plugin resolver -- which is what fnx-setup itself uses to reach it.
+
+Never path math on `__file__`, and never pin the owning plugin either: `rest_protect`
+moved from fnx-setup to fnx-core between 0.47.39 and 0.47.50 (measured 2026-08-24), which
+broke every Gmail entry point at import until the resolver replaced the fixed location.
 
 ## Connections held here
 
