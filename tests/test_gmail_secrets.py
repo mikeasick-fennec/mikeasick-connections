@@ -278,3 +278,72 @@ def test_scripts_and_library_share_one_implementation(rel):
     assert not leaked, f"{rel} re-implements the flow: {sorted(leaked)}"
     assert called & SHARED, f"{rel} calls no shared gmail_secrets function"
     assert "oauth2.googleapis.com" not in source, f"{rel} hard-codes the token endpoint"
+
+
+# --- Non-interactive lookup (memo b67b1569) ----------------------------------
+
+class _RevokedRequest(_StubRequest):
+    """Token endpoint answering invalid_grant, as Google does for a revoked grant."""
+
+    def __call__(self, url=None, method="POST", body=None, headers=None, **kw):
+        payload = json.dumps({"error": "invalid_grant",
+                              "error_description": "Token has been expired or revoked."})
+        return type("Resp", (), {"status": 400, "data": payload.encode()})()
+
+
+@pytest.fixture
+def no_consent(monkeypatch):
+    """Any browser consent is a test failure."""
+    def boom(*a, **kw):
+        raise AssertionError("run_consent started a browser flow")
+    monkeypatch.setattr(gmail_secrets, "run_consent", boom)
+
+
+def test_missing_grant_non_interactive_raises_with_repair_command(store, no_consent):
+    """Fails when absent: a missing grant opens a browser and waits with no deadline."""
+    from mikeasick_connections import gmail_auth
+    with pytest.raises(gmail_secrets.ConsentRequired) as caught:
+        gmail_auth.get_credentials("personal", interactive=False)
+    assert "gmail-grant --account personal --scopes gmail" in str(caught.value)
+
+
+def test_revoked_grant_non_interactive_raises_not_consents(store, no_consent, monkeypatch):
+    """Fails when absent: invalid_grant on refresh falls through to browser consent.
+    Sealed grant on disk, so has_grant is True -- the case the memo reports."""
+    from mikeasick_connections import gmail_auth
+    _grant(store)
+    monkeypatch.setattr(gmail_auth, "Request", _RevokedRequest)
+    assert gmail_auth.has_grant("personal", READONLY)
+    with pytest.raises(gmail_secrets.ConsentRequired) as caught:
+        gmail_auth.get_credentials("personal", interactive=False)
+    message = str(caught.value)
+    assert "RefreshError" in message and "--scopes gmail" in message
+    assert FAKE_REFRESH not in message and FAKE_SECRET not in message
+
+
+def test_default_still_runs_consent(store, monkeypatch):
+    """Back-compat: callers that pass nothing keep today's browser consent."""
+    from mikeasick_connections import gmail_auth
+    called = []
+    monkeypatch.setattr(gmail_secrets, "run_consent",
+                        lambda identity, scopes, **kw: called.append(identity) or "creds")
+    assert gmail_auth.get_credentials("personal") == "creds"
+    assert called == [IDENTITY]
+
+
+def test_check_all_skips_ungranted_scope_sets(store, monkeypatch):
+    """Fails when absent: `gmail-check --scopes all` exits 1 for an optional scope
+    set nobody granted (modify, calendar-events)."""
+    from mikeasick_connections import cli
+    _grant(store)
+    checked = []
+    monkeypatch.setattr(cli, "_check_one", lambda identity, scopes: checked.append(scopes) or 0)
+    monkeypatch.setattr("sys.argv", ["gmail-check", "--scopes", "all"])
+    assert cli.check() == 0
+    assert checked == [READONLY]
+
+
+def test_check_all_with_no_grants_fails(store, monkeypatch):
+    from mikeasick_connections import cli
+    monkeypatch.setattr("sys.argv", ["gmail-check", "--scopes", "all"])
+    assert cli.check() == 1

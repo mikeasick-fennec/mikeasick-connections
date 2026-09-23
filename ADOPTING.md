@@ -20,9 +20,10 @@ Do not edit every caller. Turn the project's own module into a re-export:
 """Thin re-export of mikeasick_connections.gmail_auth. Add nothing here."""
 
 from mikeasick_connections.gmail_auth import (  # noqa: F401
-    ACCOUNTS, GMAIL_SCOPES, GMAIL_MODIFY_SCOPES, CALENDAR_SCOPES,
-    get_all_services, get_all_calendar_services, get_gmail_service,
-    get_modify_service, has_modify_token, identity_for,
+    ACCOUNTS, GMAIL_SCOPES, GMAIL_MODIFY_SCOPES, CALENDAR_SCOPES, CALENDAR_EVENTS_SCOPES,
+    get_all_services, get_all_calendar_services, get_calendar_events_service,
+    get_gmail_service, get_modify_service, has_calendar_events_grant, has_modify_token,
+    identity_for,
 )
 ```
 
@@ -46,3 +47,8 @@ it out.
 missing key rather than an exception mid-run. Gate on `has_modify_token(alias)` before
 reaching for modify scope: without a grant, that call opens an interactive consent, which
 will hang a batch job.
+
+`has_*` checks presence, not validity: a revoked grant still reads True. An unattended caller
+passes `interactive=False` to any `get_*` call. A missing or revoked grant then raises
+`gmail_secrets.ConsentRequired`, whose message names the `gmail-grant` command that repairs
+it, instead of opening a browser. The default stays `interactive=True`.

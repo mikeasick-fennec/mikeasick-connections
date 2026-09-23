@@ -41,6 +41,11 @@ class GrantMissing(GmailSecretError):
     """No sealed grant on disk for this identity and scope set."""
 
 
+class ConsentRequired(GmailSecretError):
+    """The grant is missing or revoked, and the caller forbade interactive consent.
+    The message names the account and the `gmail-grant` command that repairs it."""
+
+
 class AppSecretIncomplete(GmailSecretError):
     """The Vault entry is missing a field the client config requires."""
 

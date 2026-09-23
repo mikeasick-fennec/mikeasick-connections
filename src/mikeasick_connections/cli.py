@@ -13,11 +13,7 @@ import sys
 from mikeasick_connections import chrome_profiles, gmail_auth, gmail_secrets
 from mikeasick_connections.identities import EMAIL_IDENTITIES
 
-SCOPE_SETS = {
-    "gmail": gmail_auth.GMAIL_SCOPES,
-    "modify": gmail_auth.GMAIL_MODIFY_SCOPES,
-    "calendar": gmail_auth.CALENDAR_SCOPES,
-}
+SCOPE_SETS = gmail_auth.SCOPE_SETS
 
 
 def _account_arg(parser):
@@ -104,5 +100,12 @@ def check() -> int:
                     choices=sorted(SCOPE_SETS) + ["all"])
     args = ap.parse_args()
     identity = gmail_auth.identity_for(args.account)
-    names = sorted(SCOPE_SETS) if args.scopes == "all" else [args.scopes]
+    names = [args.scopes]
+    if args.scopes == "all":
+        # Optional scope sets (modify, calendar-events) are not failures when ungranted.
+        names = [n for n in sorted(SCOPE_SETS) if gmail_auth.has_grant(args.account, SCOPE_SETS[n])]
+        if not names:
+            print(f"[gmail-check] {identity}: no sealed grants; run gmail-grant",
+                  file=sys.stderr, flush=True)
+            return 1
     return max(_check_one(identity, SCOPE_SETS[n]) for n in names)

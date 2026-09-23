@@ -3,6 +3,13 @@
 Michael's **personal-level** connections: the accounts he authenticates as, and the
 code that obtains and holds those grants. Not an enterprise capability, deliberately.
 
+## Mission
+
+- This project controls Michael Sick's personal connections.
+- Their secrets are sourced from Zoho Vault.
+- Only Michael Sick's own projects use them. Nothing else should.
+- A change requested by a consuming project must not break the other consumers.
+
 code-quality-gates: compliant
 tier: script
 duplication-baseline: 0.00

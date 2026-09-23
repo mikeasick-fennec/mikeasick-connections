@@ -28,7 +28,16 @@ from mikeasick_connections.identities import EMAIL_IDENTITIES, resolve
 GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 GMAIL_MODIFY_SCOPES = ["https://www.googleapis.com/auth/gmail.modify"]
 CALENDAR_SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+CALENDAR_EVENTS_SCOPES = ["https://www.googleapis.com/auth/calendar.events"]
 ALL_SCOPES = GMAIL_SCOPES + CALENDAR_SCOPES
+
+# Named scope sets, as `gmail-grant --scopes` spells them.
+SCOPE_SETS = {
+    "gmail": GMAIL_SCOPES,
+    "modify": GMAIL_MODIFY_SCOPES,
+    "calendar": CALENDAR_SCOPES,
+    "calendar-events": CALENDAR_EVENTS_SCOPES,
+}
 
 ACCOUNTS = {
     alias: {"identity": i.name, "login_hint": i.login_hint}
@@ -54,27 +63,41 @@ def has_grant(account: str, scopes) -> bool:
     return gmail_secrets.scope_key(scopes) in described["scope_sets"]
 
 
-def _get_credentials(account, scopes):
-    """Valid credentials for the account and scope set, from the sealed store."""
+def _consent(account, scopes, interactive, reason):
+    """Run browser consent, or raise ConsentRequired when the caller forbade it."""
+    identity = identity_for(account)
+    if not interactive:
+        alias = next(a for a, v in ACCOUNTS.items() if v["identity"] == identity)
+        key = gmail_secrets.scope_key(scopes)
+        name = next((n for n, s in SCOPE_SETS.items()
+                     if gmail_secrets.scope_key(s) == key), key)
+        raise gmail_secrets.ConsentRequired(
+            f"{identity} scope set '{key}': {reason}; "
+            f"repair with: gmail-grant --account {alias} --scopes {name}")
+    return gmail_secrets.run_consent(identity, scopes, login_hint=_login_hint(account))
+
+
+def _get_credentials(account, scopes, interactive=True):
+    """Valid credentials for the account and scope set, from the sealed store.
+    With interactive=False, a missing or revoked grant raises ConsentRequired
+    instead of opening a browser and waiting."""
     identity = identity_for(account)
     try:
         creds = gmail_secrets.read_grant(identity, scopes)
     except gmail_secrets.GrantMissing:
-        return gmail_secrets.run_consent(
-            identity, scopes, login_hint=_login_hint(account))
+        return _consent(account, scopes, interactive, "no sealed grant")
     if creds.valid:
         return creds
     try:
         creds.refresh(Request())
     except RefreshError as exc:
-        # Refresh token revoked or expired (invalid_grant) -- fall through to
-        # interactive consent instead of crashing. The message names the failure
-        # class, never a credential value.
-        print(f"[gmail_auth] refresh failed for {identity} "
-              f"({type(exc).__name__}: {str(exc)[:160]}); re-running OAuth consent.",
-              file=sys.stderr, flush=True)
-        return gmail_secrets.run_consent(
-            identity, scopes, login_hint=_login_hint(account))
+        # Refresh token revoked or expired (invalid_grant). The message names the
+        # failure class, never a credential value.
+        reason = f"refresh failed ({type(exc).__name__}: {str(exc)[:160]})"
+        if interactive:
+            print(f"[gmail_auth] {identity}: {reason}; re-running OAuth consent.",
+                  file=sys.stderr, flush=True)
+        return _consent(account, scopes, interactive, reason)
     # A refresh may rotate the refresh token, so reseal what we now hold.
     gmail_secrets.write_grant(
         identity, scopes,
@@ -86,14 +109,14 @@ def _get_credentials(account, scopes):
     return creds
 
 
-def get_credentials(account="personal"):
+def get_credentials(account="personal", interactive=True):
     """Get valid Gmail credentials for the specified account."""
-    return _get_credentials(account, GMAIL_SCOPES)
+    return _get_credentials(account, GMAIL_SCOPES, interactive)
 
 
-def get_calendar_credentials(account="personal"):
+def get_calendar_credentials(account="personal", interactive=True):
     """Get valid Calendar credentials for the specified account."""
-    return _get_credentials(account, CALENDAR_SCOPES)
+    return _get_credentials(account, CALENDAR_SCOPES, interactive)
 
 
 def has_modify_token(account="personal"):
@@ -101,44 +124,57 @@ def has_modify_token(account="personal"):
     return has_grant(account, GMAIL_MODIFY_SCOPES)
 
 
-def get_modify_service(account="personal"):
+def get_modify_service(account="personal", interactive=True):
     """Gmail service with modify scope (covers drafts().create). Caller SHOULD gate
     on has_modify_token first -- with no grant this opens an interactive consent."""
-    creds = _get_credentials(account, GMAIL_MODIFY_SCOPES)
+    creds = _get_credentials(account, GMAIL_MODIFY_SCOPES, interactive)
     return build("gmail", "v1", credentials=creds)
 
 
-def get_gmail_service(account="personal"):
+def get_gmail_service(account="personal", interactive=True):
     """Build and return an authenticated Gmail API service."""
-    return build("gmail", "v1", credentials=get_credentials(account))
+    return build("gmail", "v1", credentials=get_credentials(account, interactive))
 
 
-def get_calendar_service(account="personal"):
+def get_calendar_service(account="personal", interactive=True):
     """Build and return an authenticated Google Calendar API service."""
-    return build("calendar", "v3", credentials=get_calendar_credentials(account))
+    creds = get_calendar_credentials(account, interactive)
+    return build("calendar", "v3", credentials=creds)
 
 
-def get_all_services():
+def has_calendar_events_grant(account="personal"):
+    """True if a sealed calendar.events grant exists (no refresh, no consent)."""
+    return has_grant(account, CALENDAR_EVENTS_SCOPES)
+
+
+def get_calendar_events_service(account="personal", interactive=True):
+    """Calendar service that can create, update, and delete events. Caller SHOULD
+    gate on has_calendar_events_grant first -- with no grant this opens consent."""
+    creds = _get_credentials(account, CALENDAR_EVENTS_SCOPES, interactive)
+    return build("calendar", "v3", credentials=creds)
+
+
+def get_all_services(interactive=True):
     """Return Gmail services for every account holding a sealed readonly grant."""
     services = {}
     for name in ACCOUNTS:
         if not has_grant(name, GMAIL_SCOPES):
             continue
         try:
-            services[name] = get_gmail_service(name)
+            services[name] = get_gmail_service(name, interactive)
         except Exception as e:
             log(f"  Skipping {name} account: {e}")
     return services
 
 
-def get_all_calendar_services():
+def get_all_calendar_services(interactive=True):
     """Return Calendar services for every account holding a sealed calendar grant."""
     services = {}
     for name in ACCOUNTS:
         if not has_grant(name, CALENDAR_SCOPES):
             continue
         try:
-            services[name] = get_calendar_service(name)
+            services[name] = get_calendar_service(name, interactive)
         except Exception as e:
             log(f"  Skipping {name} calendar: {e}")
     return services

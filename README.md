@@ -23,11 +23,13 @@ from mikeasick_connections import gmail_auth
 
 services = gmail_auth.get_all_services()          # {alias: gmail service}
 svc = gmail_auth.get_modify_service("personal")   # label / draft / send
+cal = gmail_auth.get_calendar_events_service("personal")  # create / edit events
 ```
 
 ```
-gmail-check --account personal --scopes all       # is the grant live? no Vault needed
+gmail-check --account personal --scopes all       # every held grant live? no Vault needed
 gmail-grant --account personal --scopes gmail     # obtain one; needs an unlocked Vault
+gmail-grant --account personal --scopes calendar-events   # event write scope
 ```
 
 `CLAUDE.md` carries the boundary and the rules. `.claude/skills/personal-connections/`
